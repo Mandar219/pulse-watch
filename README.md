@@ -100,10 +100,7 @@ This stack implements a **closed-loop feedback system**:
 
 Watch your terminal. When an alert fires, you will see a high-visibility intercept message appear directly in the `docker-compose` output:
 
-```text
-🚨 [ALERT SYSTEM INTERCEPT] Alertmanager dispatched 1 notification(s)!
-   [FIRING] Alert: "InstantAvailabilityDegradation" (page) | Summary: Instantaneous Availability Drop (Sub-5s Detection)
-```
+![Logs output](./screenshots/logs.png)
 
 ---
 
@@ -115,3 +112,5 @@ Open [http://localhost:3001](http://localhost:3001) to view the pre-provisioned 
 * **Traffic RPS**: Requests per second stacked by status code.
 * **Error Rate Timeline**: Dynamic error percentage mapped against the SRE 0.5% budget limit.
 * **Saturation**: Event Loop Lag (Node thread blocking indicators), Host CPU footprint, and RSS memory usage.
+
+![Grafana Dashboard](./screenshots/grafana.png)
