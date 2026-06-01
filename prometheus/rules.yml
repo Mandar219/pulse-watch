@@ -1,0 +1,103 @@
+groups:
+  # =========================================================================
+  # 1. Recording Rules (Pre-calculates values to optimize query performance)
+  # =========================================================================
+  - name: service_slo_recording_rules
+    rules:
+      # Availability error rates (fraction of responses >= 500)
+      - record: job:http_error_rate:ratio_rate3s
+        expr: sum(rate(http_requests_total{status_code=~"5.."}[3s])) / sum(rate(http_requests_total[3s]))
+      - record: job:http_error_rate:ratio_rate5m
+        expr: sum(rate(http_requests_total{status_code=~"5.."}[5m])) / sum(rate(http_requests_total[5m]))
+      - record: job:http_error_rate:ratio_rate30m
+        expr: sum(rate(http_requests_total{status_code=~"5.."}[30m])) / sum(rate(http_requests_total[30m]))
+      - record: job:http_error_rate:ratio_rate1h
+        expr: sum(rate(http_requests_total{status_code=~"5.."}[1h])) / sum(rate(http_requests_total[1h]))
+      - record: job:http_error_rate:ratio_rate6h
+        expr: sum(rate(http_requests_total{status_code=~"5.."}[6h])) / sum(rate(http_requests_total[6h]))
+
+      # Latency SLO violation rates (fraction of requests > 200ms)
+      - record: job:http_latency_violation_rate:ratio_rate5s
+        expr: 1 - (sum(rate(http_request_duration_seconds_bucket{le="0.2"}[5s])) / sum(rate(http_request_duration_seconds_count[5s])))
+      - record: job:http_latency_violation_rate:ratio_rate5m
+        expr: 1 - (sum(rate(http_request_duration_seconds_bucket{le="0.2"}[5m])) / sum(rate(http_request_duration_seconds_count[5m])))
+      - record: job:http_latency_violation_rate:ratio_rate30m
+        expr: 1 - (sum(rate(http_request_duration_seconds_bucket{le="0.2"}[30m])) / sum(rate(http_request_duration_seconds_count[30m])))
+      - record: job:http_latency_violation_rate:ratio_rate1h
+        expr: 1 - (sum(rate(http_request_duration_seconds_bucket{le="0.2"}[1h])) / sum(rate(http_request_duration_seconds_count[1h])))
+      - record: job:http_latency_violation_rate:ratio_rate6h
+        expr: 1 - (sum(rate(http_request_duration_seconds_bucket{le="0.2"}[6h])) / sum(rate(http_request_duration_seconds_count[6h])))
+
+  # =========================================================================
+  # 2. Alerting Rules (Triggering active alerts based on rules)
+  # =========================================================================
+  - name: service_health_alert_rules
+    rules:
+      # --- Real-Time Instant Alerts (Sub-5s Demo Alarms) ---
+      - alert: InstantAvailabilityDegradation
+        expr: job:http_error_rate:ratio_rate3s > 0.10
+        for: 2s
+        labels:
+          severity: page
+          tier: api
+        annotations:
+          summary: "Instantaneous Availability Drop (Sub-5s Detection)"
+          description: "Over 10% of requests are failing with 5xx server errors in the last 3s. Current failure rate: {{ $value | humanizePercentage }}."
+
+      - alert: InstantLatencyDegradation
+        expr: job:http_latency_violation_rate:ratio_rate5s > 0.30
+        for: 3s
+        labels:
+          severity: warning
+          tier: api
+        annotations:
+          summary: "Instantaneous Latency Spike (Sub-5s Detection)"
+          description: "Over 30% of requests are exceeding the 200ms latency threshold. Current slow rate: {{ $value | humanizePercentage }}."
+
+      # --- Production SRE Multi-Window Multi-Burn-Rate Alerts ---
+      
+      # 99.5% Availability SLO (0.5% monthly error budget)
+      # Fast Burn Alert: Consumes 2% budget in 1 hour (Burn Rate = 14.4, Error Rate = 7.2%)
+      - alert: AvailabilitySLOFastBurnCritical
+        expr: job:http_error_rate:ratio_rate1h > 0.072 and job:http_error_rate:ratio_rate5m > 0.072
+        for: 1m
+        labels:
+          severity: page
+          tier: sre
+        annotations:
+          summary: "Critical availability budget burn rate active"
+          description: "The 99.5% Availability SLO is burning its budget rapidly (1h and 5m error rates > 7.2%). Current: {{ $value | humanizePercentage }}."
+
+      # Slow Burn Alert: Consumes 5% budget in 6 hours (Burn Rate = 6.0, Error Rate = 3.0%)
+      - alert: AvailabilitySLOSlowBurnWarning
+        expr: job:http_error_rate:ratio_rate6h > 0.03 and job:http_error_rate:ratio_rate30m > 0.03
+        for: 5m
+        labels:
+          severity: ticket
+          tier: sre
+        annotations:
+          summary: "Warning: availability budget slow burn active"
+          description: "The 99.5% Availability SLO is burning its budget slowly (6h and 30m error rates > 3.0%). Current: {{ $value | humanizePercentage }}."
+
+      # 95.0% Latency SLO (5% monthly slow request budget)
+      # Fast Burn Alert: Consumes 2% budget in 1 hour (Burn Rate = 14.4, Violation Rate = 72%)
+      - alert: LatencySLOFastBurnCritical
+        expr: job:http_latency_violation_rate:ratio_rate1h > 0.72 and job:http_latency_violation_rate:ratio_rate5m > 0.72
+        for: 1m
+        labels:
+          severity: page
+          tier: sre
+        annotations:
+          summary: "Critical latency budget burn rate active"
+          description: "The 95.0% Latency SLO is burning its budget rapidly (1h and 5m slow rates > 72%). Current: {{ $value | humanizePercentage }}."
+
+      # Slow Burn Alert: Consumes 5% budget in 6 hours (Burn Rate = 6.0, Violation Rate = 30%)
+      - alert: LatencySLOSlowBurnWarning
+        expr: job:http_latency_violation_rate:ratio_rate6h > 0.30 and job:http_latency_violation_rate:ratio_rate30m > 0.30
+        for: 5m
+        labels:
+          severity: ticket
+          tier: sre
+        annotations:
+          summary: "Warning: latency budget slow burn active"
+          description: "The 95.0% Latency SLO is burning its budget slowly (6h and 30m slow rates > 30%). Current: {{ $value | humanizePercentage }}."
